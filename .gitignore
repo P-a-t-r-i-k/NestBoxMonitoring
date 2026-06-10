@@ -1,0 +1,12 @@
+# Build directories
+build/
+bin/
+
+# Images
+nest_box_images/
+*.jpg
+
+# IDE files
+.vscode/
+.idea/
+*.user
