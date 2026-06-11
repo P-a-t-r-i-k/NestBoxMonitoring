@@ -4,6 +4,8 @@
 #include <QDateTime>
 #include <QDir>
 #include <QDebug>
+#include <QRandomGenerator>
+#include <QCryptographicHash>
 
 CameraNode::CameraNode(QObject* parent) : QObject(parent)
 {
@@ -22,6 +24,76 @@ CameraNode::CameraNode(QObject* parent) : QObject(parent)
 	// Start the repeating timer
 	int deltaTimeMs = 1800000;
 	m_timer->start(deltaTimeMs);
+
+	// Initialize TCP server on port 5000
+	m_clientSocket = nullptr;
+	m_tcpServer = new QTcpServer(this);
+	connect(m_tcpServer, &QTcpServer::newConnection, this, &CameraNode::handleNewConnection);
+
+	if (m_tcpServer->listen(QHostAddress::AnyIPv4, 5000))
+		qDebug() << "Server listening on port 5000. Ready for secure connections.";
+}
+
+void CameraNode::handleNewConnection()
+{
+	if (m_clientSocket)
+	{
+		// Allow only one client at a time
+		QTcpSocket* extraSocket = m_tcpServer->nextPendingConnection();
+		extraSocket->disconnectFromHost();
+		return;
+	}
+
+	m_clientSocket = m_tcpServer->nextPendingConnection();
+	m_isAuthenticated = false;
+
+	// Generate a random nonce
+	m_currentNonce = QString::number(QRandomGenerator::global()->generate());
+	
+	connect(m_clientSocket, &QTcpSocket::readyRead, this, &CameraNode::handleReadyRead);
+	connect(m_clientSocket, &QTcpSocket::disconnected, this, &CameraNode::handleDisconnected);
+
+	m_clientSocket->write(m_currentNonce.toUtf8());
+	qDebug() << "Client connected. Sent nonce: " << m_currentNonce;
+}
+
+void CameraNode::handleReadyRead()
+{
+	if (!m_clientSocket)
+		return;
+
+	QByteArray data = m_clientSocket->readAll().trimmed();
+
+	if (!m_isAuthenticated)
+	{
+		// Verify the response
+		QByteArray combined = QByteArray::fromHex(m_expectedHash.toUtf8());
+		combined.append(m_currentNonce.toUtf8());
+
+		QByteArray expectedResponse = QCryptographicHash::hash(combined, QCryptographicHash::Sha256).toHex();
+		
+		if (data == expectedResponse)
+		{
+			m_isAuthenticated = true;
+			qDebug() << "AUTH_SUCCESS";
+			m_clientSocket->write("AUTH_SUCCESS\n");
+		}
+		else
+		{
+			qDebug() << "AUTH_FAIL";
+			m_clientSocket->write("AUTH_FAIL\n");
+			m_clientSocket->disconnectFromHost();
+		}
+
+		return;
+	}
+}
+
+void CameraNode::handleDisconnected()
+{
+	qDebug() << "Client disconnected.";
+	m_clientSocket = nullptr;
+	m_isAuthenticated = false;
 }
 
 void CameraNode::takeSnapshot()
@@ -48,6 +120,6 @@ void CameraNode::takeSnapshot()
 		qDebug() << "Successfully saved: " << filePath;
 	else
 		qCritical() << "Camera process timed out or failed!";
-
+	
 	cameraProcess->deleteLater();
 }
