@@ -98,8 +98,16 @@ void CameraNode::handleDisconnected()
 
 void CameraNode::takeSnapshot()
 {
-	QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss");
-	QString filePath = QString("%1/img_%2.jpg").arg(m_storagePath, timestamp);
+	QDateTime now = QDateTime::currentDateTime();
+	QString dateFolder = now.toString("yyyyMMdd");
+	QString timestamp = now.toString("yyyyMMdd_hhmmss");
+
+	QString dailyFilePath = m_storagePath + '/' + dateFolder;
+
+	// Ensure the daily folder exists
+	QDir().mkpath(dailyFilePath);
+
+	QString filePath = QString("%1/img_%2.jpg").arg(dailyFilePath, timestamp);
 
 	qDebug() << "Triggering snapshot, target file: " << filePath;
 
