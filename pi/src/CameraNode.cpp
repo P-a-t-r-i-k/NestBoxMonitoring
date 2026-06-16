@@ -87,6 +87,42 @@ void CameraNode::handleReadyRead()
 
 		return;
 	}
+
+	QString request = QString::fromUtf8(data);
+	QStringList parts = request.split("-");
+	int totalNeededParts = 2;
+	if (parts.size() == totalNeededParts && parts[0].toLower() == "list")
+	{
+		QString date = parts[1];
+		QString dailyFolder = m_storagePath + "/" + date;
+
+		qDebug() << "Client requested image list for date: " << date;
+
+		// Get content from the requested folder
+		QDir dir(dailyFolder);
+		if (!dir.exists())
+		{
+			m_clientSocket->write("EMPTY\n");
+			return;
+		}
+
+		QStringList filters;
+		filters << "*.jpg";
+		QStringList files = dir.entryList(filters, QDir::Files, QDir::Name);
+
+		if (files.size() == 0)
+		{
+			m_clientSocket->write("EMPTY\n");
+                        return;
+		}
+
+		QByteArray response = files.join(",").toUtf8();
+
+		m_clientSocket->write(response + "\n");
+		m_clientSocket->flush();
+
+		qDebug() << "Sent" << files.size() << "filenames to client.";
+	}
 }
 
 void CameraNode::handleDisconnected()
