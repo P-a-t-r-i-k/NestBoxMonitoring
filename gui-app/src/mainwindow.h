@@ -31,6 +31,7 @@ private slots:
     void onConnectButtonClicked();
     void onSocketReadyRead();
     void onSocketConnected();
+    void onGoToImagesButtonClicked();
 
 private:
     void sendResponseFromNonce(QByteArray nonce);

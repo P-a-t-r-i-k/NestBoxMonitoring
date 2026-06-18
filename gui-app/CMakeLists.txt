@@ -24,6 +24,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(gui-app
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
+        src/imageviewerdialog.h src/imageviewerdialog.cpp src/imageviewerdialog.ui
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET gui-app APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR

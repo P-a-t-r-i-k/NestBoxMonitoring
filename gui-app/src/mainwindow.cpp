@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
+#include "imageviewerdialog.h"
 
 #include <QPushButton>
 
@@ -13,6 +14,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(m_ui->connectButton, &QPushButton::clicked, this, &MainWindow::onConnectButtonClicked);
     connect(m_ui->disconnectButton, &QPushButton::clicked, this, &MainWindow::handleDisconnection);
+    connect(m_ui->goToImagesButton, &QPushButton::clicked, this, &MainWindow::onGoToImagesButtonClicked);
 
     // Initialize the socket
     m_socket = new QTcpSocket(this);
@@ -65,6 +67,16 @@ void MainWindow::onSocketReadyRead()
 void MainWindow::onSocketConnected()
 {
     m_ui->statusLabel->setText("Waiting for nonce...");
+}
+
+void MainWindow::onGoToImagesButtonClicked()
+{
+    disconnect(m_socket, &QTcpSocket::readyRead, this, &MainWindow::onSocketReadyRead);
+
+    ImageViewerDialog imageViewerDialog(m_socket);
+    imageViewerDialog.exec();
+
+    connect(m_socket, &QTcpSocket::readyRead, this, &MainWindow::onSocketReadyRead);
 }
 
 void MainWindow::sendResponseFromNonce(QByteArray nonce)
