@@ -13,6 +13,7 @@ ImageViewerDialog::ImageViewerDialog(QTcpSocket* tcpSocket, QWidget* parent)
     connect(m_ui->listButton, &QPushButton::clicked, this, &ImageViewerDialog::onListButtonClicked);
     connect(m_tcpSocket, &QTcpSocket::readyRead, this, &ImageViewerDialog::onSocketReadyRead);
     connect(m_ui->openFolderButton, &QPushButton::clicked, this, &ImageViewerDialog::onOpenFolderButtonClicked);
+    connect(m_ui->showImageButton, &QPushButton::clicked, this, &ImageViewerDialog::onShowImageButtonClicked);
 }
 
 ImageViewerDialog::~ImageViewerDialog()
@@ -67,6 +68,46 @@ void ImageViewerDialog::onOpenFolderButtonClicked()
     }
     else
         QMessageBox::information(this, "Warning", "No folder has been selected.");
+}
+
+void ImageViewerDialog::onShowImageButtonClicked()
+{
+    QListWidgetItem* selectedItem = m_ui->downloadedImagesListWidget->currentItem();
+    if (!selectedItem)
+    {
+        QMessageBox::critical(this, "Image Error", "An error occurred while loading the selected image!");
+        return;
+    }
+
+    QString filename = selectedItem->text();
+    QString filepath = m_selectedDirectoryPath + "/" + filename;
+    qDebug() << "User wants to show:" << filepath;
+
+    QPixmap pix(filepath);
+    if (!pix.isNull())
+    {
+        m_ui->imageLabel->setText("");
+        m_ui->imageLabel->setPixmap(pix.scaled(m_ui->imageLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        m_ui->imageLabel->setFrameShape(QFrame::NoFrame);
+
+        QStringList parts = filename.split(".")[0].split("_");
+        if (parts[0] == "img" && parts.size() == 3)
+        {
+            QString date = parts[1];
+            QDate qDate = QDate::fromString(date, "yyyyMMdd");
+            m_ui->dateLabel->setText(qDate.toString("dd.MM.yyyy"));
+
+            QString time = parts[2];
+            QTime qTime = QTime::fromString(time, "hhmmss");
+            m_ui->timeLabel->setText(qTime.toString("hh:mm:ss"));
+        }
+    }
+    else
+    {
+        QMessageBox::critical(this, "Image Error", "Image could not be found!");
+        m_ui->imageLabel->setText("No image to show");
+        m_ui->imageLabel->setFrameShape(QFrame::Box);
+    }
 }
 
 void ImageViewerDialog::updateDownloadDirContent()

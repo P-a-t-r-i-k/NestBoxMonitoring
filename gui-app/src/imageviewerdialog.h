@@ -25,6 +25,7 @@ private slots:
     void onListButtonClicked();
     void onSocketReadyRead();
     void onOpenFolderButtonClicked();
+    void onShowImageButtonClicked();
 
 private:
     void updateDownloadDirContent();
