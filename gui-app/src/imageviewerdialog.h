@@ -19,10 +19,15 @@ public:
 private:
     Ui::ImageViewerDialog* m_ui;
     QTcpSocket* m_tcpSocket;
+    QString m_selectedDirectoryPath = "";
 
 private slots:
     void onListButtonClicked();
     void onSocketReadyRead();
+    void onOpenFolderButtonClicked();
+
+private:
+    void updateDownloadDirContent();
 };
 
 #endif // IMAGEVIEWERDIALOG_H
