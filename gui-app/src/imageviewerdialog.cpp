@@ -3,10 +3,11 @@
 #include <QFileDialog>
 #include <QMessageBox>
 
-ImageViewerDialog::ImageViewerDialog(QTcpSocket* tcpSocket, QWidget* parent)
+ImageViewerDialog::ImageViewerDialog(QTcpSocket* tcpSocket, MainWindow::ConnectionState connectionState, QWidget* parent)
     : QDialog(parent)
     , m_ui(new Ui::ImageViewerDialog)
     , m_tcpSocket(tcpSocket)
+    , m_currentConnectionState(connectionState)
 {
     m_ui->setupUi(this);
 
@@ -14,6 +15,7 @@ ImageViewerDialog::ImageViewerDialog(QTcpSocket* tcpSocket, QWidget* parent)
     connect(m_tcpSocket, &QTcpSocket::readyRead, this, &ImageViewerDialog::onSocketReadyRead);
     connect(m_ui->openFolderButton, &QPushButton::clicked, this, &ImageViewerDialog::onOpenFolderButtonClicked);
     connect(m_ui->showImageButton, &QPushButton::clicked, this, &ImageViewerDialog::onShowImageButtonClicked);
+    connect(m_ui->downloadImagesButton, &QPushButton::clicked, this, &ImageViewerDialog::onDownloadButtonClicked);
 }
 
 ImageViewerDialog::~ImageViewerDialog()
@@ -34,24 +36,58 @@ void ImageViewerDialog::onListButtonClicked()
 
 void ImageViewerDialog::onSocketReadyRead()
 {
-    m_ui->availableImagesListWidget->clear();
-    QByteArray data = m_tcpSocket->readAll().trimmed();
-    QString response = QString::fromUtf8(data);
-
-    if (response.toLower() == "empty")
+    while (m_tcpSocket->bytesAvailable() > 0)
     {
-        QListWidgetItem* item = new QListWidgetItem("No images for this day", m_ui->availableImagesListWidget);
-        item->setTextAlignment(Qt::AlignCenter);
-        m_ui->availableImagesListWidget->setSelectionMode(QAbstractItemView::NoSelection);
-        return;
-    }
+        if (m_currentConnectionState == MainWindow::ConnectionState::Authenticated)
+        {
+            if (!m_tcpSocket->canReadLine())
+                return;
 
-    m_ui->availableImagesListWidget->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    QStringList imageNames = response.split(',');
-    for (const QString& name : std::as_const(imageNames))
-    {
-        QListWidgetItem* item = new QListWidgetItem(name, m_ui->availableImagesListWidget);
-        item->setTextAlignment(Qt::AlignCenter);
+            QByteArray line = m_tcpSocket->readLine().trimmed();
+            QString response = QString::fromUtf8(line);
+
+            if (response.startsWith("info-"))
+            {
+                QStringList parts = response.split('-');
+                if (parts.size() == 3)
+                {
+                    m_downloadingFileName = parts[1];
+                    m_expectedBytes = parts[2].toLongLong();
+                    m_imageBuffer.clear();
+                    m_currentConnectionState = MainWindow::ConnectionState::DownloadingImage;
+                    qDebug() << "Incoming image:" << m_downloadingFileName << "Size:" << m_expectedBytes;
+                }
+            }
+            else if (response.toLower() == "empty")
+            {
+                QListWidgetItem* item = new QListWidgetItem("No images for this day", m_ui->availableImagesListWidget);
+                item->setTextAlignment(Qt::AlignCenter);
+                m_ui->availableImagesListWidget->setSelectionMode(QAbstractItemView::NoSelection);
+                return;
+            }
+            else
+            {
+                m_ui->availableImagesListWidget->setSelectionMode(QAbstractItemView::ExtendedSelection);
+                QStringList imageNames = response.split(',');
+                for (const QString& name : std::as_const(imageNames))
+                {
+                    QListWidgetItem* item = new QListWidgetItem(name, m_ui->availableImagesListWidget);
+                    item->setTextAlignment(Qt::AlignCenter);
+                }
+            }
+        }
+        else if (m_currentConnectionState == MainWindow::ConnectionState::DownloadingImage)
+        {
+            int bytesToRead = qMin(m_tcpSocket->bytesAvailable(), m_expectedBytes - m_imageBuffer.size());
+            m_imageBuffer.append(m_tcpSocket->read(bytesToRead));
+
+            if (m_imageBuffer.size() == m_expectedBytes)
+            {
+                // Image fully received
+                processDownloadedImage();
+                m_currentConnectionState = MainWindow::ConnectionState::Authenticated;
+            }
+        }
     }
 }
 
@@ -110,6 +146,37 @@ void ImageViewerDialog::onShowImageButtonClicked()
     }
 }
 
+void ImageViewerDialog::onDownloadButtonClicked()
+{
+    QList<QListWidgetItem*> selectedItems = m_ui->availableImagesListWidget->selectedItems();
+    if (selectedItems.count() == 0)
+        return;
+
+    if (m_selectedDirectoryPath == "")
+    {
+        QMessageBox::critical(this, "Download folder error", "No download folder selected!");
+        return;
+    }
+
+    QString imagesToDownload;
+    int i = 0;
+    for (const auto& selectedItem : std::as_const(selectedItems))
+    {
+        imagesToDownload = imagesToDownload % selectedItem->text();
+        if (i < selectedItems.count() - 1)
+            imagesToDownload = imagesToDownload % ",";
+
+        ++i;
+    }
+
+    m_tcpSocket->write("get-" + imagesToDownload.toUtf8());
+
+    QStringList images = imagesToDownload.split(",");
+    qDebug() << "Total images =" << images.size();
+
+    qDebug() << "Send request for images" << imagesToDownload;
+}
+
 void ImageViewerDialog::updateDownloadDirContent()
 {
     QDir directory(m_selectedDirectoryPath);
@@ -124,5 +191,27 @@ void ImageViewerDialog::updateDownloadDirContent()
     {
         QListWidgetItem* item = new QListWidgetItem(image, m_ui->downloadedImagesListWidget);
         item->setTextAlignment(Qt::AlignCenter);
+    }
+}
+
+void ImageViewerDialog::processDownloadedImage()
+{
+    QString path = m_selectedDirectoryPath + "/" + m_downloadingFileName;
+    QFile file(path);
+    if (file.open(QIODevice::WriteOnly))
+    {
+        file.write(m_imageBuffer);
+        file.close();
+        qDebug() << "Image saved to:" << path;
+
+        // Update list widget for downloaded images
+        QListWidgetItem* item = new QListWidgetItem(m_downloadingFileName, m_ui->downloadedImagesListWidget);
+        item->setTextAlignment(Qt::AlignCenter);
+    }
+    else
+    {
+        qCritical() << "Failed to save image to:" << path;
+        QMessageBox::critical(this, "Image Error", "Image could not be saved to " + path);
+        return;
     }
 }

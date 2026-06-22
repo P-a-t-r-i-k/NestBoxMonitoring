@@ -21,7 +21,8 @@ public:
         Idle,
         WaitingForNonce,
         WaitingForAuthResult,
-        Authenticated
+        Authenticated,
+        DownloadingImage
     };
 
     MainWindow(QWidget* parent = nullptr);
