@@ -73,7 +73,7 @@ void MainWindow::onGoToImagesButtonClicked()
 {
     disconnect(m_socket, &QTcpSocket::readyRead, this, &MainWindow::onSocketReadyRead);
 
-    ImageViewerDialog imageViewerDialog(m_socket);
+    ImageViewerDialog imageViewerDialog(m_socket, ConnectionState::Authenticated);
     imageViewerDialog.exec();
 
     connect(m_socket, &QTcpSocket::readyRead, this, &MainWindow::onSocketReadyRead);
