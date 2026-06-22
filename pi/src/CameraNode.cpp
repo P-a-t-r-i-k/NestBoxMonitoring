@@ -123,6 +123,10 @@ void CameraNode::handleReadyRead()
 
 		qDebug() << "Sent" << files.size() << "filenames to client.";
 	}
+	else if (parts.size() == totalNeededParts && parts[0].toLower() == "get")
+	{
+		sendImages(parts[1]);
+	}
 }
 
 void CameraNode::handleDisconnected()
@@ -166,4 +170,37 @@ void CameraNode::takeSnapshot()
 		qCritical() << "Camera process timed out or failed!";
 	
 	cameraProcess->deleteLater();
+}
+
+void CameraNode::sendImages(QString imagesString)
+{
+	QStringList images = imagesString.split(",");
+	qDebug() << "Total images =" << images.size();
+	for (const QString& image : images)
+	{
+		QStringList parts = image.split("_");
+		if (parts.size() != 3)
+			continue;
+
+		QString date = parts[1];
+		QString fullPath = m_storagePath + "/" + date + "/" + image;
+		qDebug() << fullPath;
+		QFile file(fullPath);
+
+		if (file.open(QIODevice::ReadOnly))
+		{
+			int size = file.size();
+			QByteArray header = QString("info-%1-%2\n").arg(image).arg(size).toUtf8();
+
+			qDebug() << "Image:" << image;
+			qDebug() << "Sending header...";
+			m_clientSocket->write(header);
+
+			qDebug() << "Sending data...";
+			m_clientSocket->write(file.readAll());
+			m_clientSocket->flush();
+
+			file.close();
+		}
+	}
 }
